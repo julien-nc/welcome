@@ -22,6 +22,12 @@ Once the app is installed, if you want the Welcome widget to be displayed by def
 occ config:app:set dashboard layout --value=welcome,recommendations,spreed,mail,calendar
 ```
 
+### Multilingual support
+
+The widget supports different languages by appending `_lang` to the specified filename. So if the original filename is `mywelcome.md`, the widget will look for `mywelcome_sv.md` for a user with Swedish set as their language. If that file is not present, the configured filename will be used.
+
+(If the user has no specific language setting, the default language of the Nextcloud instance will be used.)
+
 ### Screenshot
 
 ![Welcome widget example](img/screenshot1.jpg)

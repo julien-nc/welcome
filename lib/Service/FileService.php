@@ -8,6 +8,9 @@
  *
  * @author Julien Veyssier
  * @copyright Julien Veyssier 2022
+ *
+ * Addition of multilingual support by Joaquim Homrighausen
+ * 2023-03, github @joho1968
  */
 
 namespace OCA\Welcome\Service;
@@ -23,13 +26,14 @@ use OCP\Files\NotFoundException;
 use OCP\Files\NotPermittedException;
 use OCP\IConfig;
 use OCP\IURLGenerator;
+use OCP\IUser;
 use OCP\IUserManager;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
 function startsWith(string $haystack, string $needle): bool {
-	$length = strlen($needle);
-	return (substr($haystack, 0, $length) === $needle);
+	$length = mb_strlen($needle);
+	return (mb_substr($haystack, 0, $length) === $needle);
 }
 
 class FileService {
@@ -78,8 +82,84 @@ class FileService {
 		$userName = $this->config->getAppValue(Application::APP_ID, 'userName');
 		$userId = $this->config->getAppValue(Application::APP_ID, 'userId');
 
+        // Get current user so we can get settings
+        $sessionUserId = \OC_User::getUser();
+        // Figure out system's default language, default to "en"
+        $systemLang = $this->config->getSystemValue('default_language', 'en');
+        if (empty($systemLang)) {
+            // We may need to override this manually because it's apparently
+            // possible to get an empty string here
+            $systemLang = 'en';
+        }
+        // Figure out if system is configured to force a language
+        $systemForceLang = $this->config->getSystemValue('force_language', false);
+        // Figure out system's default locale, default to "en_US"
+        $systemLocale = $this->config->getSystemValue('default_locale', 'en_US');
+        if (empty($systemLocale)) {
+            // We may need to override this manually because it's apparently
+            // possible to get an empty string here
+            $systemLocale = 'en_US';
+        }
+        // Figure out if system is configured to force a locale
+        $systemForceLocale = $this->config->getSystemValue('force_locale', false);
+        //Finally, fetch user's lang and locale settings
+        $userLang = $this->config->getUserValue($sessionUserId, 'core', 'lang', 'en');
+        $userLocale = $this->config->getUserValue($sessionUserId, 'core', 'locale', 'en_US');
+        // Apply defaults
+        if ($systemForceLang !== false && $systemForceLang !== 'false') {
+            if ($systemForceLang !== true && $systemForceLang !== 'true') {
+                // 'force_language' is set to an actual language code
+                $userLang = $systemForceLang;
+            } else {
+                // 'force_language' is set to true
+                $userLang = $systemLang;
+            }
+        } elseif (empty($userLang)) {
+            $userLang = 'en';
+        }
+        if ($systemForceLocale !== false && $systemForceLocale !== 'false') {
+            if ($systemForceLocale !== true && $systemForceLocale !== 'true') {
+                // 'force_locale' is set to an actual language code. This could
+                // possibly not be allowed, but we'll make allowance for it :-)
+                $userLocale = $systemForceLocale;
+            } else {
+                // 'force_locale' is set to true
+                $userLocale = $systemLocale;
+            }
+        } elseif (empty($userLocal)) {
+            $userLocale = 'en_US';
+        }
+
+        /**
+         * Note: For some languagues, and German in particular, Nextcloud uses
+         * the full locale for the language setting. This is, apparently, for
+         * historical reasons (ownCloud) For example, informal German has the
+         * lang set to "de", whereas formal German has the lang set to "de_DE".
+         * This will result in a different filename, although they're both
+         * technically german. So it'd be "welcome_de.md" and
+         * "welcome.de_DE.md" in that case. But we'll split the final language
+         * string at _ (underscore) to avoid this.
+         */
+        $tmpSplit = explode('_', $userLang, 2);
+        if (is_array($tmpSplit)) {
+            // We'll assume string is reasonably correct and just use the
+            // first part. This would not handle a situation where the string
+            // looks like "_de_DE", but that's an "invalid" string anyway.
+            $userLang = strtolower($tmpSplit[0]);
+        }
+
 		if ($filePath && $userName && $userId && $this->userManager->userExists($userId)) {
 			$userFolder = $this->root->getUserFolder($userId);
+            $fileBase = dirname($filePath) . basename($filePath, '.md');
+            $userBase = $fileBase . '_' . $userLang . '.md';
+            // First attempt to locate language specific welcome_xx.md file
+			if ($userFolder->nodeExists($userBase)) {
+				$file = $userFolder->get($userBase);
+				if ($file instanceof File) {
+					return $file;
+				}
+            }
+            // No language specific file found, use whatever is configured
 			if ($userFolder->nodeExists($filePath)) {
 				$file = $userFolder->get($filePath);
 				if ($file instanceof File) {

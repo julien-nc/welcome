@@ -25,3 +25,9 @@ occ config:app:set dashboard layout --value=welcome,recommendations,spreed,mail,
 ### Screenshot
 
 ![Welcome widget example](img/screenshot1.jpg)
+
+### General Usage Guide
+
+1. The markdown file should only be created from the Text app for proper support of links and images
+2. Manually added links should ideally be absolute links with file IDs for files/folders (eg. `http://cloud.example.com/index.php/f/123`)
+3. Images would be displayed only if added through the image icon in the Text app and not through relative path or file ID links
